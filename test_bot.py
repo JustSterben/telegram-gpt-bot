@@ -19,7 +19,6 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
     print("🔹 OPENAI_API_KEY:", OPENAI_API_KEY)
 print("🔹 TELEGRAM_BOT_TOKEN:", TELEGRAM_BOT_TOKEN)
-
     raise ValueError("❌ Не найдены API-ключи. Проверь переменные окружения!")
 
 # Создаём бота и диспетчер
