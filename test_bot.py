@@ -17,8 +17,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Проверяем, что ключи существуют
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
-    print("❌ Ошибка: API-ключи не найдены!")
-    print("🔹 Проверь переменные окружения в Railway.")
+    print(f"🔹 OPENAI_API_KEY: {OPENAI_API_KEY}")
+    print(f"🔹 TELEGRAM_BOT_TOKEN: {TELEGRAM_BOT_TOKEN}")
     exit(1)  # Завершаем работу, если ключей нет
 
 # Создаём бота и диспетчер
