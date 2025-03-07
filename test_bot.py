@@ -1,6 +1,6 @@
 import os
-from openai import OpenAI
 import asyncio
+from openai import OpenAI
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -11,13 +11,23 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения
 load_dotenv()
 
+<<<<<<< HEAD
 # Получаем API-ключи из переменных окружения
+=======
+# Получаем API-ключи
+>>>>>>> b9c6fa5 (Исправлены ошибки отступов и загрузки API-ключей)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Проверяем, что ключи существуют
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
+<<<<<<< HEAD
     raise ValueError("❌ Не найдены API-ключи. Проверь переменные окружения в Railway!")
+=======
+    print("❌ Ошибка: API-ключи не найдены!")
+    print("🔹 Проверь переменные окружения в Railway.")
+    exit(1)  # Завершаем работу, если ключей нет
+>>>>>>> b9c6fa5 (Исправлены ошибки отступов и загрузки API-ключей)
 
 # Создаём бота и диспетчер
 bot = Bot(
