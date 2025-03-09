@@ -60,7 +60,7 @@ def load_faq():
     faq_dict = {}
     
     for row in data:
-        question = row.get("Основной вопрос", "").strip().lower()
+        question = row.get("Основной вопрос", "").strip().lower()  # Исправили ключ!
         answer = row.get("Ответ", "").strip()
         if question and answer:
             faq_dict[question] = answer
@@ -69,6 +69,7 @@ def load_faq():
     return faq_dict
 
 FAQ = load_faq()
+
 
 # Функция поиска наиболее похожего вопроса
 def find_best_match(user_question, faq_dict):
