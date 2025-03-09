@@ -103,6 +103,7 @@ async def start_command(message: Message):
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
+print(f"📩 Вопрос от пользователя: {user_text}")  # Выводим в логи
 
     # Сначала обрабатываем вопрос через GPT, чтобы он понял его смысл
     matched_question = await process_question_with_gpt(user_text)
