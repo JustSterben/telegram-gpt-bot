@@ -1,5 +1,6 @@
 import os
 import asyncio
+import gspread
 from openai import OpenAI
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
@@ -18,11 +19,13 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 # ID группы в Telegram, куда отправлять вопросы без ответов
 GROUP_CHAT_ID = -4704353814
 
+# Ссылка на Google Таблицу
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQV7TxMDrZiZpSKWrz8IBpmo/edit?gid=0"
+
 # Проверяем, что ключи существуют
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
-    print(f"🔹 OPENAI_API_KEY: {OPENAI_API_KEY}")
-    print(f"🔹 TELEGRAM_BOT_TOKEN: {TELEGRAM_BOT_TOKEN}")
-    exit(1)  # Завершаем работу, если ключей нет
+    print("❌ Ошибка! Не найдены ключи API.")
+    exit(1)
 
 # Создаём бота и диспетчер
 bot = Bot(
@@ -31,14 +34,23 @@ bot = Bot(
 )
 dp = Dispatcher()
 
-# Функция общения с ChatGPT
-async def chat_with_gpt(prompt):
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content.strip()
+# Подключение к Google Таблице
+gc = gspread.service_account(filename="credentials.json")  # Файл с ключами Google API
+spreadsheet = gc.open_by_url(GOOGLE_SHEET_URL)
+sheet = spreadsheet.sheet1  # Используем первый лист
+
+# Загружаем вопросы и ответы из таблицы
+def load_faq():
+    data = sheet.get_all_records()  # Получаем все записи
+    faq_dict = {}
+    for row in data:
+        question = row.get("Вопрос", "").strip().lower()
+        answer = row.get("Ответ", "").strip()
+        if question and answer:
+            faq_dict[question] = answer
+    return faq_dict
+
+FAQ = load_faq()
 
 # Функция отправки сообщения в Telegram-группу
 async def send_to_group(question, user_id):
@@ -48,20 +60,21 @@ async def send_to_group(question, user_id):
 # Обработчик команды /start
 @dp.message(Command("start"))
 async def start_command(message: Message):
-    await message.answer("🤖 Привет! Я бот, который поможет вам в доме. Задавайте вопросы!")
+    await message.answer("🤖 Привет! Я бот-помощник по дому. Задавайте вопросы, и я помогу вам!")
 
 # Обработчик текстовых сообщений
 @dp.message()
 async def handle_message(message: Message):
-    user_text = message.text
-    response = await chat_with_gpt(user_text)
+    user_text = message.text.strip().lower()
 
-    # Проверяем, есть ли адекватный ответ от ChatGPT
-    if not response or "не знаю" in response.lower() or "не уверен" in response.lower():
+    # Проверяем, есть ли ответ в базе
+    response = FAQ.get(user_text)
+
+    if response:
+        await message.answer(response)  # Отправляем готовый ответ
+    else:
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина. Напишите подробнее, что вас интересует, и я передам информацию.")
         await send_to_group(user_text, message.from_user.id)  # Отправляем вопрос в группу
-    else:
-        await message.answer(response)
 
 # Функция запуска бота
 async def main():
