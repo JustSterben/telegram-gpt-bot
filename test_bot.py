@@ -60,7 +60,7 @@ def load_faq():
     faq_dict = {}
     
     for row in data:
-        question = row.get("Вопрос", "").strip().lower()
+        question = row.get("Основной вопрос", "").strip().lower()
         answer = row.get("Ответ", "").strip()
         if question and answer:
             faq_dict[question] = answer
