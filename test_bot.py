@@ -52,15 +52,19 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQ
 spreadsheet = gc.open_by_url(SPREADSHEET_URL)
 sheet = spreadsheet.sheet1  # Первый лист
 
-# Загружаем вопросы и ответы из таблицы
+# Загружаем вопросы и ответы из Google Таблицы
 def load_faq():
     data = sheet.get_all_records()  # Получаем все записи
+    print("📥 Данные из Google Sheets:", data)  # Вывод в логи для проверки
     faq_dict = {}
+    
     for row in data:
         question = row.get("Вопрос", "").strip().lower()
         answer = row.get("Ответ", "").strip()
         if question and answer:
             faq_dict[question] = answer
+    
+    print("✅ Загруженные вопросы:", list(faq_dict.keys()))  # Проверяем загруженные вопросы
     return faq_dict
 
 FAQ = load_faq()
