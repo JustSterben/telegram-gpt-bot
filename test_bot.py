@@ -57,15 +57,31 @@ sheet = spreadsheet.sheet1  # Первый лист
 def load_faq():
     data = sheet.get_all_records()  # Получаем все записи
     print("📥 Данные из Google Sheets:", data)  # Вывод в логи для проверки
+
+    if not data:
+        print("❌ Ошибка: Google Sheets пустая или не читается")
+        return {}
+
+    # Очищаем заголовки от скрытых символов (табуляция, пробелы)
+    headers = {key.strip(): key for key in data[0].keys()}
+    print("🔍 Исправленные ключи таблицы:", headers)  # Вывод в логи
+
+    # Используем исправленные ключи
+    question_key = headers.get("Основной вопрос", None)
+    answer_key = headers.get("Ответ", None)
+
+    if not question_key or not answer_key:
+        print("❌ Ошибка: Не найдены столбцы 'Основной вопрос' или 'Ответ'")
+        return {}
+
+    # Заполняем словарь FAQ
     faq_dict = {}
-    print("🔍 Ключи в Google Sheets:", data[0].keys())  # Проверяем заголовки таблицы
-    
     for row in data:
-        question = row.get("Основной вопрос", "").strip().lower()  # Исправили ключ!
-        answer = row.get("Ответ", "").strip()
+        question = row.get(question_key, "").strip().lower()
+        answer = row.get(answer_key, "").strip()
         if question and answer:
             faq_dict[question] = answer
-    
+
     print("✅ Загруженные вопросы:", list(faq_dict.keys()))  # Проверяем загруженные вопросы
     return faq_dict
 
