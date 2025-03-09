@@ -15,6 +15,9 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+# ID группы в Telegram, куда отправлять вопросы без ответов
+GROUP_CHAT_ID = -4704353814
+
 # Проверяем, что ключи существуют
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
     print(f"🔹 OPENAI_API_KEY: {OPENAI_API_KEY}")
@@ -28,7 +31,6 @@ bot = Bot(
 )
 dp = Dispatcher()
 
-
 # Функция общения с ChatGPT
 async def chat_with_gpt(prompt):
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -36,29 +38,36 @@ async def chat_with_gpt(prompt):
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}]
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content.strip()
 
+# Функция отправки сообщения в Telegram-группу
+async def send_to_group(question, user_id):
+    message_text = f"📩 <b>Новый вопрос от гостя:</b>\n❓ {question}\n\n👉 <i>Ответьте ему в чате или сообщите мне, чтобы я передал информацию.</i>"
+    await bot.send_message(GROUP_CHAT_ID, message_text)
 
 # Обработчик команды /start
 @dp.message(Command("start"))
 async def start_command(message: Message):
-    await message.answer("🤖 Привет! Я бот с ChatGPT, развернутый на Railway. Напиши мне что-нибудь!")
-
+    await message.answer("🤖 Привет! Я бот, который поможет вам в доме. Задавайте вопросы!")
 
 # Обработчик текстовых сообщений
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text
     response = await chat_with_gpt(user_text)
-    await message.answer(response)
 
+    # Проверяем, есть ли адекватный ответ от ChatGPT
+    if not response or "не знаю" in response.lower() or "не уверен" in response.lower():
+        await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина. Напишите подробнее, что вас интересует, и я передам информацию.")
+        await send_to_group(user_text, message.from_user.id)  # Отправляем вопрос в группу
+    else:
+        await message.answer(response)
 
 # Функция запуска бота
 async def main():
     print("🚀 Бот успешно запущен на Railway!")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 # Запуск
 if __name__ == "__main__":
