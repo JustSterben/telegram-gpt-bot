@@ -10,6 +10,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from openai import OpenAI
 from dotenv import load_dotenv
+from difflib import get_close_matches
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -69,6 +70,12 @@ def load_faq():
 
 FAQ = load_faq()
 
+# Функция поиска наиболее похожего вопроса
+def find_best_match(user_question, faq_dict):
+    """Находит наиболее похожий вопрос в базе"""
+    matches = get_close_matches(user_question, faq_dict.keys(), n=1, cutoff=0.6)
+    return matches[0] if matches else None
+
 # Функция общения с ChatGPT для обработки вопросов
 async def process_question_with_gpt(user_text):
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -103,19 +110,16 @@ async def start_command(message: Message):
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
-print(f"📩 Вопрос от пользователя: {user_text}")  # Выводим в логи
+    print(f"📩 Вопрос от пользователя: {user_text}")  # Логируем вопрос
 
-    # Сначала обрабатываем вопрос через GPT, чтобы он понял его смысл
-    matched_question = await process_question_with_gpt(user_text)
+    # Найдём наиболее похожий вопрос в базе
+    matched_question = find_best_match(user_text, FAQ)
 
-    # Если GPT распознал вопрос и нашёл его в списке FAQ, даём ответ
-    if matched_question in FAQ:
-        await message.answer(FAQ[matched_question])
-    elif "я отвечаю только на вопросы по дому" in matched_question:
-        await message.answer("Я отвечаю только на вопросы по дому. Чем могу помочь?")
+    if matched_question:
+        await message.answer(FAQ[matched_question])  # Отправляем ответ из базы
     else:
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина. Напишите подробнее, что вас интересует, и я передам информацию.")
-        await send_to_group(user_text, message.from_user.id)  # Отправляем вопрос в группу
+        await send_to_group(user_text, message.from_user.id)  # Отправляем вопрос в Telegram-группу
 
 # Функция запуска бота
 async def main():
