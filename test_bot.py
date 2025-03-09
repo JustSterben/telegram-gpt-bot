@@ -36,7 +36,15 @@ dp = Dispatcher()
 
 # Подключение к Google Таблице через переменные окружения
 creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)  # Декодируем JSON из переменной
-creds = Credentials.from_service_account_info(creds_dict)
+
+# ✅ Добавлены правильные OAuth-скопы
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+
+# Авторизуемся в Google Sheets
 gc = gspread.authorize(creds)
 
 # Открываем Google Таблицу
