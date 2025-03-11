@@ -141,6 +141,9 @@ async def handle_message(message: Message):
 @dp.message()
 async def handle_group_reply(message: Message):
     print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
+    print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id})")
+print(f"📝 Это ответ на сообщение: {message.reply_to_message}")  
+# Проверяем, видит ли бот ответ
 
     # Проверяем, что сообщение из группы и является ответом на вопрос
     if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
