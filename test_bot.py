@@ -19,7 +19,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
-# ID группы, куда отправляются неизвестные вопросы (убедитесь, что он правильный)
+# ID группы, куда отправляются неизвестные вопросы (проверьте, что он правильный!)
 GROUP_CHAT_ID = -1002461315654
 
 # Проверяем переменные окружения
@@ -108,6 +108,10 @@ async def process_question_with_gpt(user_text):
 # Обработчик сообщений от гостей (если бот не знает ответа)
 @dp.message()
 async def handle_message(message: Message):
+    if not message.text:  # Проверяем, что это текстовое сообщение
+        print(f"⚠ Бот получил НЕ текстовое сообщение (тип: {message.content_type})")
+        return  # Пропускаем обработку, если это не текст
+
     user_text = message.text.strip().lower()
     user_id = message.from_user.id
     print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
@@ -131,17 +135,9 @@ async def handle_message(message: Message):
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
 
-# Обработчик всех сообщений в группе для отладки
-@dp.message()
-async def debug_group_messages(message: Message):
-    if message.chat.id == GROUP_CHAT_ID:
-        print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id}, Chat ID: {message.chat.id})")
-
 # Обработчик ответов в группе (ожидается, что администратор ответит через "Ответить")
 @dp.message()
 async def handle_group_reply(message: Message):
-    print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
-
     if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
         original_message_id = message.reply_to_message.message_id
         print(f"📝 Это ответ на сообщение ID: {original_message_id}")
