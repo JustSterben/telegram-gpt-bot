@@ -145,9 +145,15 @@ async def handle_group_reply(message: Message):
         print(f"📝 Ответ привязан к сообщению ID: {original_message_id}")
 
         if original_message_id in pending_questions:
-            guest_id = pending_questions.pop(original_message_id)
-            response_text = message.text.strip()
+            guest_id = pending_questions[original_message_id]
+            
+            # Проверяем, не отвечает ли тот же человек, который задал вопрос
+            if message.from_user.id == guest_id:
+                print("⚠ Тот же пользователь отвечает на свой вопрос – не отправляем гостю.")
+                await message.reply("⚠ Вы сами задали этот вопрос. Ответ не отправлен.")
+                return
 
+            response_text = message.text.strip()
             print(f"✅ Отправляем гостю (ID {guest_id}): '{response_text}'")
 
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
