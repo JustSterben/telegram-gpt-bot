@@ -140,23 +140,28 @@ async def handle_message(message: Message):
 async def handle_group_reply(message: Message):
     print(f"📨 Ответ в группе: {message.text} (ID: {message.message_id})")
 
+    # Проверяем, что это сообщение пришло из нашей группы
     if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
         original_message_id = message.reply_to_message.message_id
         print(f"📝 Ответ привязан к сообщению ID: {original_message_id}")
 
+        # Проверяем, есть ли сохранённый вопрос
         if original_message_id in pending_questions:
-            guest_id = pending_questions[original_message_id]
-            
-            # Проверяем, не отвечает ли тот же человек, который задал вопрос
-            if message.from_user.id == guest_id:
-                print("⚠ Тот же пользователь отвечает на свой вопрос – не отправляем гостю.")
-                await message.reply("⚠ Вы сами задали этот вопрос. Ответ не отправлен.")
+            guest_id = pending_questions.pop(original_message_id)  # Убираем связь после отправки
+            response_text = message.text.strip()
+
+            # Если ответ пустой – ничего не делаем
+            if not response_text:
+                print("⚠ Пустой ответ, ничего не отправляем.")
+                await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
                 return
 
-            response_text = message.text.strip()
             print(f"✅ Отправляем гостю (ID {guest_id}): '{response_text}'")
 
+            # Отправляем ответ гостю
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+
+            # Подтверждение в группе
             await message.reply("✅ Ответ отправлен гостю!")
         else:
             print("❌ Ошибка: Не найден гость, связанный с этим вопросом.")
