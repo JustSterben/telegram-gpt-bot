@@ -108,6 +108,8 @@ async def process_question_with_gpt(user_text):
 
 # Обработчик текстовых сообщений от гостей
 @dp.message()
+async def debug_all_messages(message: Message):
+    print(f"👀 Бот получил сообщение! Chat ID: {message.chat.id}, User ID: {message.from_user.id}, Text: {message.text}")
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
     user_id = message.from_user.id
