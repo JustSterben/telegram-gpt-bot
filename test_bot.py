@@ -19,7 +19,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
-# ID группы, куда отправляются неизвестные вопросы (проверьте, что он правильный!)
+# ID группы, куда отправляются неизвестные вопросы (убедитесь, что он правильный!)
 GROUP_CHAT_ID = -1002461315654
 
 # Проверяем переменные окружения
