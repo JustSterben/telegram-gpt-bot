@@ -107,12 +107,27 @@ async def process_question_with_gpt(user_text):
 
 # Обработчик сообщений от гостей (если бот не знает ответа)
 @dp.message()
+@dp.message()
 async def handle_message(message: Message):
-    if not message.text:  # Проверяем, что это текстовое сообщение
-        print(f"⚠ Бот получил НЕ текстовое сообщение (тип: {message.content_type})")
-        return  # Пропускаем обработку, если это не текст
+    user_text = message.text.strip().lower() if message.text else None
 
-    user_text = message.text.strip().lower()
+    # Проверяем, пришло ли сообщение из группы
+    if message.chat.id == GROUP_CHAT_ID:
+        print(f"📨 Сообщение в группе (Chat ID: {message.chat.id}): '{user_text}'")
+
+        # Если это ответ на сообщение (Reply), значит админ отвечает на вопрос
+        if message.reply_to_message:
+            print("📝 Это ответ на вопрос, передаем в обработку.")
+            await handle_group_reply(message)
+        else:
+            print("⚠ Игнорируем сообщение в группе, это не ответ.")
+        return
+
+    # Обработка сообщений от гостей (личные сообщения боту)
+    if not user_text:
+        print(f"⚠ Бот получил НЕ текстовое сообщение (тип: {message.content_type})")
+        return
+
     user_id = message.from_user.id
     print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
 
@@ -134,7 +149,6 @@ async def handle_message(message: Message):
         pending_questions[sent_message.message_id] = user_id
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
-
 # Обработчик ответов в группе (ожидается, что администратор ответит через "Ответить")
 @dp.message()
 async def handle_group_reply(message: Message):
