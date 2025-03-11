@@ -112,10 +112,6 @@ async def send_to_group(question, user_id):
     )
     pending_questions[message.message_id] = user_id  # Запоминаем ID сообщения и гостя
 
-# Функция добавления нового вопроса в Google Таблицу
-def add_question_to_sheet(question, answer):
-    sheet.append_row([question, answer, ""])  # Добавляем новый вопрос-ответ
-
 # Обработчик команды /start
 @dp.message(Command("start"))
 async def start_command(message: Message):
@@ -141,21 +137,19 @@ async def handle_message(message: Message):
 # Обработчик ответов в группе
 @dp.message()
 async def handle_group_reply(message: Message):
+    print(f"📨 Сообщение в группе: {message.text} (ID: {message.message_id})")
+
     if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
         original_message_id = message.reply_to_message.message_id
+        print(f"📝 Ответ на сообщение с ID: {original_message_id}")
 
         if original_message_id in pending_questions:
             guest_id = pending_questions.pop(original_message_id)
             response_text = message.text.strip()
+            print(f"✅ Ответ найден: '{response_text}' → Отправляем гостю {guest_id}")
 
             # Отправляем ответ гостю
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
-
-            # Добавляем в базу знаний
-            original_question = message.reply_to_message.text.replace("📩 <b>Новый вопрос от гостя:</b>\n❓ ", "").split("\n")[0]
-            add_question_to_sheet(original_question, response_text)
-            FAQ[original_question.lower()] = response_text
-            print(f"✅ Новый вопрос добавлен в базу: {original_question} -> {response_text}")
 
 # Запуск бота
 async def main():
