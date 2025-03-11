@@ -48,7 +48,7 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQ
 spreadsheet = gc.open_by_url(SPREADSHEET_URL)
 sheet = spreadsheet.sheet1  # Первый лист
 
-# Запоминаем вопросы гостей
+# Храним, кто задал вопрос
 pending_questions = {}
 
 # Функция загрузки FAQ из таблицы
@@ -106,7 +106,8 @@ async def process_question_with_gpt(user_text):
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
-    print(f"📩 Вопрос от пользователя (ID {message.from_user.id}): {user_text}")
+    user_id = message.from_user.id
+    print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
 
     # GPT ищет похожий вопрос
     matched_question = await process_question_with_gpt(user_text)
@@ -120,30 +121,30 @@ async def handle_message(message: Message):
         # Отправляем вопрос в группу
         sent_message = await bot.send_message(
             GROUP_CHAT_ID,
-            f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n\n✍ Напишите ответ на этот вопрос, ответ будет отправлен гостю автоматически.",
+            f"📩 <b>Новый вопрос от гостя (ID {user_id}):</b>\n❓ {user_text}\n\n✍ Напишите ответ на этот вопрос, ответ будет отправлен гостю автоматически.",
             parse_mode="HTML"
         )
 
         # Привязываем ID сообщения в группе к пользователю
-        pending_questions[sent_message.message_id] = message.from_user.id
+        pending_questions[sent_message.message_id] = user_id
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
 
 # Обработчик ответов в группе
 @dp.message()
 async def handle_group_reply(message: Message):
-    print(f"📨 Сообщение в группе: {message.text} (ID: {message.message_id})")
+    print(f"📨 Ответ в группе: {message.text} (ID: {message.message_id})")
 
     if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
         original_message_id = message.reply_to_message.message_id
-        print(f"📝 Ответ на сообщение с ID: {original_message_id}")
+        print(f"📝 Ответ привязан к сообщению ID: {original_message_id}")
 
         # Проверяем, есть ли сохранённый вопрос
         if original_message_id in pending_questions:
             guest_id = pending_questions.pop(original_message_id)  # Убираем связь после отправки
             response_text = message.text.strip()
 
-            print(f"✅ Ответ найден: '{response_text}' → Отправляем гостю {guest_id}")
+            print(f"✅ Отправляем гостю (ID {guest_id}): '{response_text}'")
 
             # Отправляем ответ гостю
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
