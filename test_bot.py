@@ -110,7 +110,9 @@ async def process_question_with_gpt(user_text):
     )
     return response.choices[0].message.content.strip().lower()
 
-# Обработчик текстовых сообщений (если бот не знает ответа)
+# Храним вопросы в формате {ID сообщения в группе: ID гостя}
+pending_questions = {}
+
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
@@ -131,43 +133,39 @@ async def handle_message(message: Message):
             parse_mode="HTML"
         )
 
+        # Связываем ID сообщения в группе с ID гостя
         pending_questions[sent_message.message_id] = user_id
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
 
-# Обработчик ответов в группе
 @dp.message()
 async def handle_group_reply(message: Message):
     print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
 
-    # Проверяем, что сообщение пришло из группы и является ответом на вопрос
+    # Проверяем, что сообщение из группы и является ответом на вопрос
     if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
-        original_message_text = message.reply_to_message.text
+        original_message_id = message.reply_to_message.message_id
 
-        # Проверяем, содержит ли исходное сообщение ID гостя
-        if "ID гостя:" in original_message_text:
-            try:
-                guest_id = int(original_message_text.split("ID гостя:")[1].strip())
-                response_text = message.text.strip()
+        # Проверяем, есть ли ID гостя, связанный с этим вопросом
+        if original_message_id in pending_questions:
+            guest_id = pending_questions.pop(original_message_id)
+            response_text = message.text.strip()
 
-                # Если сообщение пустое – ничего не делаем
-                if not response_text:
-                    print("⚠ Пустой ответ, не отправляем.")
-                    await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
-                    return
+            # Если сообщение пустое – ничего не отправляем
+            if not response_text:
+                print("⚠ Пустой ответ, не отправляем.")
+                await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
+                return
 
-                print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
+            print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
 
-                # Отправляем ответ гостю
-                await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+            # Отправляем ответ гостю
+            await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
 
-                # Подтверждение в группе
-                await message.reply("✅ Ответ отправлен гостю!")
-            except ValueError:
-                print("❌ Ошибка: Не удалось извлечь ID гостя.")
-                await message.reply("⚠ Ошибка: Не удалось найти гостя для ответа.")
+            # Подтверждение в группе
+            await message.reply("✅ Ответ отправлен гостю!")
         else:
-            print("❌ Ошибка: В исходном сообщении нет ID гостя.")
+            print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
             await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
 
 # Запуск бота
