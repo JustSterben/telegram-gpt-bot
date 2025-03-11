@@ -19,7 +19,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
-# ID группы (поменяйте на свой)
+# ID группы, куда отправляются неизвестные вопросы (убедитесь, что он правильный)
 GROUP_CHAT_ID = -1002461315654
 
 # Проверяем переменные окружения
@@ -34,7 +34,7 @@ bot = Bot(
 )
 dp = Dispatcher()
 
-# Подключение к Google Таблице
+# Подключаемся к Google Таблице
 creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -46,9 +46,9 @@ gc = gspread.authorize(creds)
 # Открываем Google Таблицу
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQV7TxMDrZiZpSKWrz8IBpmo/edit?gid=0"
 spreadsheet = gc.open_by_url(SPREADSHEET_URL)
-sheet = spreadsheet.sheet1  # Первый лист
+sheet = spreadsheet.sheet1  # используем первый лист
 
-# Храним вопросы в формате {ID сообщения в группе: ID гостя}
+# Храним, кто задал вопрос (формат: {ID сообщения в группе: ID гостя})
 pending_questions = {}
 
 # Функция загрузки FAQ из Google Sheets
@@ -85,19 +85,18 @@ def load_faq():
 
 # Загружаем FAQ
 FAQ = load_faq()
+if not FAQ:
+    print("⚠ Внимание: FAQ пуст! Бот может не отвечать на вопросы.")
 
-# Функция обработки вопроса через GPT
+# Функция обработки вопроса через ChatGPT
 async def process_question_with_gpt(user_text):
     client = OpenAI(api_key=OPENAI_API_KEY)
     prompt = f"""
     Ты помощник по аренде дома. Гости задают вопросы о доме, удобствах, технике.
     Вот список вопросов, на которые у нас есть ответы:
-
     {', '.join(FAQ.keys())}
-
     Если вопрос похож на один из них, напиши точный вариант из списка.
     Если вопрос непонятен – просто напиши "Неизвестный вопрос".
-
     Вопрос гостя: {user_text}
     """
     response = client.chat.completions.create(
@@ -106,10 +105,8 @@ async def process_question_with_gpt(user_text):
     )
     return response.choices[0].message.content.strip().lower()
 
-# Обработчик текстовых сообщений от гостей
+# Обработчик сообщений от гостей (если бот не знает ответа)
 @dp.message()
-async def debug_all_messages(message: Message):
-    print(f"👀 Бот получил сообщение! Chat ID: {message.chat.id}, User ID: {message.from_user.id}, Text: {message.text}")
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
     user_id = message.from_user.id
@@ -129,48 +126,44 @@ async def handle_message(message: Message):
             parse_mode="HTML"
         )
 
-        # Связываем ID сообщения в группе с ID гостя
+        # Сохраняем связь: ID сообщения в группе → ID гостя
         pending_questions[sent_message.message_id] = user_id
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
 
-# Отладка: проверка, видит ли бот сообщения в группе
+# Обработчик всех сообщений в группе для отладки
 @dp.message()
 async def debug_group_messages(message: Message):
     if message.chat.id == GROUP_CHAT_ID:
-        print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id})")
+        print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id}, Chat ID: {message.chat.id})")
 
-# Обработчик ответов в группе
+# Обработчик ответов в группе (ожидается, что администратор ответит через "Ответить")
 @dp.message()
 async def handle_group_reply(message: Message):
     print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
 
-    if message.chat.id == GROUP_CHAT_ID:
-        print("✅ Бот видит сообщение в группе!")
+    if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
+        original_message_id = message.reply_to_message.message_id
+        print(f"📝 Это ответ на сообщение ID: {original_message_id}")
 
-        if message.reply_to_message:
-            original_message_id = message.reply_to_message.message_id
-            print(f"📝 Это ответ на сообщение ID: {original_message_id}")
+        if original_message_id in pending_questions:
+            guest_id = pending_questions.pop(original_message_id)
+            response_text = message.text.strip()
 
-            if original_message_id in pending_questions:
-                guest_id = pending_questions.pop(original_message_id)
+            if not response_text:
+                print("⚠ Пустой ответ, не отправляем.")
+                await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
+                return
 
-                if not message.text or message.text.strip() == "":
-                    print("⚠ Пустой ответ, не отправляем.")
-                    await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
-                    return
-
-                response_text = message.text.strip()
-                print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
-
-                await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
-                await message.reply("✅ Ответ отправлен гостю!")
-            else:
-                print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
-                await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
+            print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
+            await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+            await message.reply("✅ Ответ отправлен гостю!")
         else:
-            print("⚠ Бот не видит, что это ответ на сообщение.")
-            await message.reply("⚠ Ошибка: Ответьте на конкретное сообщение, чтобы бот его понял.")
+            print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
+            await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
+    else:
+        print("⚠ Бот не видит, что это ответ на сообщение.")
+        await message.reply("⚠ Ошибка: Ответьте на конкретное сообщение, чтобы бот его понял.")
 
 # Запуск бота
 async def main():
