@@ -90,6 +90,26 @@ FAQ = load_faq()
 if not FAQ:
     print("⚠ Внимание: FAQ пуст! Бот может не отвечать на вопросы.")
 
+# Функция обработки вопроса через GPT
+async def process_question_with_gpt(user_text):
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    prompt = f"""
+    Ты помощник по аренде дома. Гости задают вопросы о доме, удобствах, технике.
+    Вот список вопросов, на которые у нас есть ответы:
+
+    {', '.join(FAQ.keys())}
+
+    Если вопрос похож на один из них, напиши точный вариант из списка.
+    Если вопрос непонятен – просто напиши "Неизвестный вопрос".
+
+    Вопрос гостя: {user_text}
+    """
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content.strip().lower()
+
 # Обработчик текстовых сообщений (если бот не знает ответа)
 @dp.message()
 async def handle_message(message: Message):
@@ -97,21 +117,20 @@ async def handle_message(message: Message):
     user_id = message.from_user.id
     print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
 
-    # Проверяем, есть ли ответ в FAQ
-    if user_text in FAQ:
-        print(f"✅ Найден ответ в FAQ: '{user_text}'")
-        await message.answer(FAQ[user_text])
+    matched_question = await process_question_with_gpt(user_text)
+
+    if matched_question in FAQ:
+        print(f"✅ Найден ответ: '{matched_question}'")
+        await message.answer(FAQ[matched_question])
     else:
         print(f"❌ Неизвестный вопрос: '{user_text}', отправляем в группу")
 
-        # Отправляем вопрос в группу
         sent_message = await bot.send_message(
             GROUP_CHAT_ID,
             f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n👤 <b>ID гостя:</b> {user_id}\n\n✍ Напишите ответ на этот вопрос, и он будет отправлен гостю автоматически.",
             parse_mode="HTML"
         )
 
-        # Привязываем ID сообщения в группе к пользователю
         pending_questions[sent_message.message_id] = user_id
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
@@ -125,17 +144,13 @@ async def handle_group_reply(message: Message):
         original_message_id = message.reply_to_message.message_id
         print(f"📝 Ответ привязан к сообщению ID: {original_message_id}")
 
-        # Проверяем, есть ли сохранённый вопрос
         if original_message_id in pending_questions:
-            guest_id = pending_questions.pop(original_message_id)  # Убираем связь после отправки
+            guest_id = pending_questions.pop(original_message_id)
             response_text = message.text.strip()
 
             print(f"✅ Отправляем гостю (ID {guest_id}): '{response_text}'")
 
-            # Отправляем ответ гостю
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
-
-            # Подтверждение в группе
             await message.reply("✅ Ответ отправлен гостю!")
         else:
             print("❌ Ошибка: Не найден гость, связанный с этим вопросом.")
