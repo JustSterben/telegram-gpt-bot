@@ -20,7 +20,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
 # ID группы, куда отправляются неизвестные вопросы
-GROUP_CHAT_ID = -4704353814
+GROUP_CHAT_ID = -1002461315654
 
 # Проверяем переменные окружения
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN or not GOOGLE_CREDENTIALS_JSON:
