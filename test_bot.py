@@ -132,40 +132,36 @@ async def handle_message(message: Message):
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
 
-# Обработчик ответов в группе
+# Отладка: проверка, видит ли бот сообщения в группе
 @dp.message()
 async def debug_group_messages(message: Message):
     if message.chat.id == GROUP_CHAT_ID:
         print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id})")
+
+# Обработчик ответов в группе
+@dp.message()
 async def handle_group_reply(message: Message):
     print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
 
-    # Проверяем, что сообщение пришло из группы
     if message.chat.id == GROUP_CHAT_ID:
         print("✅ Бот видит сообщение в группе!")
 
-        # Проверяем, является ли это ответом на сообщение
         if message.reply_to_message:
             original_message_id = message.reply_to_message.message_id
             print(f"📝 Это ответ на сообщение ID: {original_message_id}")
 
-            # Проверяем, есть ли сохранённый вопрос в pending_questions
             if original_message_id in pending_questions:
                 guest_id = pending_questions.pop(original_message_id)
-                response_text = message.text.strip()
 
-                # Если ответ пустой – не отправляем
-                if not response_text:
+                if not message.text or message.text.strip() == "":
                     print("⚠ Пустой ответ, не отправляем.")
                     await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
                     return
 
+                response_text = message.text.strip()
                 print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
 
-                # Отправляем ответ гостю
                 await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
-
-                # Подтверждение в группе
                 await message.reply("✅ Ответ отправлен гостю!")
             else:
                 print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
