@@ -143,13 +143,21 @@ async def handle_group_reply(message: Message):
         original_message_id = message.reply_to_message.message_id
         print(f"📝 Ответ на сообщение с ID: {original_message_id}")
 
+        # Проверяем, есть ли у нас сохранённый вопрос
         if original_message_id in pending_questions:
-            guest_id = pending_questions.pop(original_message_id)
+            guest_id = pending_questions[original_message_id]
             response_text = message.text.strip()
+
             print(f"✅ Ответ найден: '{response_text}' → Отправляем гостю {guest_id}")
 
             # Отправляем ответ гостю
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+
+            # Удаляем вопрос из списка ожидания
+            del pending_questions[original_message_id]
+        else:
+            print("❌ Ошибка: Не найден гость, связанный с этим вопросом.")
+
 
 # Запуск бота
 async def main():
