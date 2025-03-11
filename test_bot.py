@@ -117,11 +117,11 @@ async def send_to_group(question, user_id):
 async def start_command(message: Message):
     await message.answer("🤖 Привет! Я бот-помощник по дому. Задавайте вопросы, и я помогу вам!")
 
-# Обработчик текстовых сообщений
+# Обработчик текстовых сообщений (если бот не знает ответа)
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
-    print(f"📩 Вопрос от пользователя: {user_text}")
+    print(f"📩 Вопрос от пользователя (ID {message.from_user.id}): {user_text}")
 
     # GPT ищет похожий вопрос
     matched_question = await process_question_with_gpt(user_text)
@@ -131,8 +131,18 @@ async def handle_message(message: Message):
         await message.answer(FAQ[matched_question])
     else:
         print(f"❌ Неизвестный вопрос: '{user_text}', отправляем в группу")
+
+        # Отправляем вопрос в группу
+        sent_message = await bot.send_message(
+            GROUP_CHAT_ID,
+            f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n\n✍ Напишите ответ на этот вопрос, ответ будет отправлен гостю автоматически.",
+            parse_mode="HTML"
+        )
+
+        # Привязываем ID сообщения в группе к пользователю
+        pending_questions[sent_message.message_id] = message.from_user.id
+
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
-        await send_to_group(user_text, message.from_user.id)
 
 # Обработчик ответов в группе
 @dp.message()
@@ -143,18 +153,15 @@ async def handle_group_reply(message: Message):
         original_message_id = message.reply_to_message.message_id
         print(f"📝 Ответ на сообщение с ID: {original_message_id}")
 
-        # Проверяем, есть ли у нас сохранённый вопрос
+        # Проверяем, есть ли сохранённый вопрос
         if original_message_id in pending_questions:
-            guest_id = pending_questions[original_message_id]
+            guest_id = pending_questions.pop(original_message_id)  # Убираем связь после отправки
             response_text = message.text.strip()
 
             print(f"✅ Ответ найден: '{response_text}' → Отправляем гостю {guest_id}")
 
             # Отправляем ответ гостю
             await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
-
-            # Удаляем вопрос из списка ожидания
-            del pending_questions[original_message_id]
 
             # Подтверждение в группе
             await message.reply("✅ Ответ отправлен гостю!")
