@@ -105,8 +105,7 @@ async def process_question_with_gpt(user_text):
     )
     return response.choices[0].message.content.strip().lower()
 
-# Обработчик сообщений от гостей (если бот не знает ответа)
-@dp.message()
+# Обработчик сообщений (фильтр на группу и гостей)
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower() if message.text else None
@@ -149,39 +148,34 @@ async def handle_message(message: Message):
         pending_questions[sent_message.message_id] = user_id
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
-# Обработчик ответов в группе (ожидается, что администратор ответит через "Ответить")
-@dp.message()
+
+# Обработчик ответов в группе (отправка гостю)
 async def handle_group_reply(message: Message):
     print(f"📨 Получено сообщение в группе: '{message.text}' (Chat ID: {message.chat.id}, Message ID: {message.message_id})")
 
-    if message.chat.id == GROUP_CHAT_ID:
-        print("✅ Бот видит сообщение в группе!")
+    if message.chat.id != GROUP_CHAT_ID:
+        return  # Если сообщение не из нужной группы, игнорируем
 
-        # Проверяем, что это ответ на сообщение
-        if not message.reply_to_message:
-            print("⚠ Бот не видит, что это ответ на сообщение.")
-            await message.reply("⚠ Ошибка: Ответьте на сообщение с вопросом, чтобы бот понял, кому отправить.")
-            return
+    print("✅ Бот видит сообщение в группе!")
 
-        # Получаем ID исходного сообщения с вопросом
-        original_message_id = message.reply_to_message.message_id
-        print(f"📝 Это ответ на сообщение ID: {original_message_id}")
+    if not message.reply_to_message:
+        print("⚠ Бот не видит, что это ответ на сообщение.")
+        await message.reply("⚠ Ошибка: Ответьте на сообщение с вопросом, чтобы бот понял, кому отправить.")
+        return
 
-        if original_message_id in pending_questions:
-            guest_id = pending_questions.pop(original_message_id)
-            response_text = message.text.strip()
+    original_message_id = message.reply_to_message.message_id
+    print(f"📝 Это ответ на сообщение ID: {original_message_id}")
 
-            if not response_text:
-                print("⚠ Пустой ответ, не отправляем.")
-                await message.reply("⚠ Ошибка: Пустой ответ. Напишите что-то, чтобы отправить гостю.")
-                return
+    if original_message_id in pending_questions:
+        guest_id = pending_questions.pop(original_message_id)
+        response_text = message.text.strip()
 
-            print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
-            await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
-            await message.reply("✅ Ответ отправлен гостю!")
-        else:
-            print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
-            await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
+        print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
+        await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+        await message.reply("✅ Ответ отправлен гостю!")
+    else:
+        print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
+        await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
 
 # Запуск бота
 async def main():
