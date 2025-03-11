@@ -3,7 +3,7 @@ import json
 import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -15,15 +15,15 @@ from difflib import get_close_matches
 # Загружаем переменные окружения
 load_dotenv()
 
-# Получаем API-ключи
+# API-ключи
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
-# ID группы в Telegram, куда отправлять вопросы без ответов
+# ID группы, куда отправляются неизвестные вопросы
 GROUP_CHAT_ID = -4704353814
 
-# Проверяем, что все переменные окружения заданы
+# Проверяем переменные окружения
 if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN or not GOOGLE_CREDENTIALS_JSON:
     print("❌ Ошибка! Не найдены ключи API или учетные данные Google.")
     exit(1)
@@ -35,17 +35,13 @@ bot = Bot(
 )
 dp = Dispatcher()
 
-# Подключение к Google Таблице через переменные окружения
+# Подключение к Google Таблице
 creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
-
-# ✅ Добавлены правильные OAuth-скопы
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-
-# Авторизуемся в Google Sheets
 gc = gspread.authorize(creds)
 
 # Открываем Google Таблицу
@@ -53,28 +49,28 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQ
 spreadsheet = gc.open_by_url(SPREADSHEET_URL)
 sheet = spreadsheet.sheet1  # Первый лист
 
-# Загружаем вопросы и ответы из Google Таблицы
+# Запоминаем вопросы гостей
+pending_questions = {}
+
+# Функция загрузки FAQ из таблицы
 def load_faq():
     data = sheet.get_all_records()
-    print("📥 Данные из Google Sheets:", data)  
+    print("📥 Данные из Google Sheets:", data)
 
     if not data:
-        print("❌ Ошибка: Google Sheets пустая или не читается")
+        print("❌ Ошибка: Google Sheets пустая")
         return {}
 
-    # Очищаем заголовки от скрытых символов
     headers = {key.strip().replace("\t", "").replace("\n", ""): key for key in data[0].keys()}
     print("🔍 Исправленные ключи таблицы:", headers)
 
-    # Определяем ключи
     question_key = next((key for key in headers if "вопрос" in key.lower()), None)
     answer_key = next((key for key in headers if "ответ" in key.lower()), None)
 
     if not question_key or not answer_key:
-        print("❌ Ошибка: Не найдены столбцы 'Основной вопрос' или 'Ответ'")
+        print("❌ Ошибка: Нет колонок 'Основной вопрос' или 'Ответ'")
         return {}
 
-    # Заполняем словарь FAQ
     faq_dict = {}
     for row in data:
         question = row.get(question_key, "").strip().lower()
@@ -87,7 +83,7 @@ def load_faq():
 
 FAQ = load_faq()
 
-# Функция обработки вопроса через ChatGPT для лучшего понимания
+# Функция обработки вопроса через ChatGPT
 async def process_question_with_gpt(user_text):
     client = OpenAI(api_key=OPENAI_API_KEY)
     prompt = f"""
@@ -107,10 +103,18 @@ async def process_question_with_gpt(user_text):
     )
     return response.choices[0].message.content.strip().lower()
 
-# Функция отправки неизвестных вопросов в Telegram-группу
+# Функция отправки неизвестного вопроса в группу
 async def send_to_group(question, user_id):
-    message_text = f"📩 <b>Новый вопрос от гостя:</b>\n❓ {question}\n\n👉 <i>Ответьте ему в чате или сообщите мне, чтобы я передал информацию.</i>"
-    await bot.send_message(GROUP_CHAT_ID, message_text)
+    message = await bot.send_message(
+        GROUP_CHAT_ID,
+        f"📩 <b>Новый вопрос от гостя:</b>\n❓ {question}\n\n✍ Напишите ответ на этот вопрос, ответ будет отправлен гостю автоматически.",
+        parse_mode="HTML"
+    )
+    pending_questions[message.message_id] = user_id  # Запоминаем ID сообщения и гостя
+
+# Функция добавления нового вопроса в Google Таблицу
+def add_question_to_sheet(question, answer):
+    sheet.append_row([question, answer, ""])  # Добавляем новый вопрос-ответ
 
 # Обработчик команды /start
 @dp.message(Command("start"))
@@ -123,28 +127,41 @@ async def handle_message(message: Message):
     user_text = message.text.strip().lower()
     print(f"📩 Вопрос от пользователя: {user_text}")
 
-    # Обрабатываем вопрос через GPT, чтобы он понял его смысл
+    # GPT ищет похожий вопрос
     matched_question = await process_question_with_gpt(user_text)
 
-    # Если GPT распознал вопрос и нашёл его в списке FAQ, даём ответ
     if matched_question in FAQ:
-        print(f"✅ Совпадение найдено: '{matched_question}' → Отправляем ответ")
+        print(f"✅ Найден ответ: '{matched_question}'")
         await message.answer(FAQ[matched_question])
-    elif "неизвестный вопрос" in matched_question:
-        print(f"❌ GPT не распознал вопрос: '{user_text}' → Отправляем в Telegram-группу")
-        await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина. Напишите подробнее, что вас интересует, и я передам информацию.")
-        await send_to_group(user_text, message.from_user.id)  # Отправляем вопрос в Telegram-группу
     else:
-        print(f"❌ GPT предложил неизвестный вариант: '{matched_question}' → Отправляем в Telegram-группу")
+        print(f"❌ Неизвестный вопрос: '{user_text}', отправляем в группу")
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
         await send_to_group(user_text, message.from_user.id)
 
-# Функция запуска бота
+# Обработчик ответов в группе
+@dp.message()
+async def handle_group_reply(message: Message):
+    if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
+        original_message_id = message.reply_to_message.message_id
+
+        if original_message_id in pending_questions:
+            guest_id = pending_questions.pop(original_message_id)
+            response_text = message.text.strip()
+
+            # Отправляем ответ гостю
+            await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+
+            # Добавляем в базу знаний
+            original_question = message.reply_to_message.text.replace("📩 <b>Новый вопрос от гостя:</b>\n❓ ", "").split("\n")[0]
+            add_question_to_sheet(original_question, response_text)
+            FAQ[original_question.lower()] = response_text
+            print(f"✅ Новый вопрос добавлен в базу: {original_question} -> {response_text}")
+
+# Запуск бота
 async def main():
-    print("🚀 Бот успешно запущен на Railway!")
+    print("🚀 Бот запущен!")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
-# Запуск
 if __name__ == "__main__":
     asyncio.run(main())
