@@ -155,9 +155,12 @@ async def handle_group_reply(message: Message):
 
             # Удаляем вопрос из списка ожидания
             del pending_questions[original_message_id]
+
+            # Подтверждение в группе
+            await message.reply("✅ Ответ отправлен гостю!")
         else:
             print("❌ Ошибка: Не найден гость, связанный с этим вопросом.")
-
+            await message.reply("⚠ Ошибка: Я не могу найти гостя, который задал этот вопрос.")
 
 # Запуск бота
 async def main():
