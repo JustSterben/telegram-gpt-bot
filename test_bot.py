@@ -10,7 +10,6 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from openai import OpenAI
 from dotenv import load_dotenv
-from difflib import get_close_matches
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -102,20 +101,6 @@ async def process_question_with_gpt(user_text):
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content.strip().lower()
-
-# Функция отправки неизвестного вопроса в группу
-async def send_to_group(question, user_id):
-    message = await bot.send_message(
-        GROUP_CHAT_ID,
-        f"📩 <b>Новый вопрос от гостя:</b>\n❓ {question}\n\n✍ Напишите ответ на этот вопрос, ответ будет отправлен гостю автоматически.",
-        parse_mode="HTML"
-    )
-    pending_questions[message.message_id] = user_id  # Запоминаем ID сообщения и гостя
-
-# Обработчик команды /start
-@dp.message(Command("start"))
-async def start_command(message: Message):
-    await message.answer("🤖 Привет! Я бот-помощник по дому. Задавайте вопросы, и я помогу вам!")
 
 # Обработчик текстовых сообщений (если бот не знает ответа)
 @dp.message()
