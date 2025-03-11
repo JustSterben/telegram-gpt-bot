@@ -19,7 +19,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
-# Новый ID супер-группы
+# ID группы (поменяйте на свой)
 GROUP_CHAT_ID = -1002461315654
 
 # Проверяем переменные окружения
@@ -48,7 +48,7 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQ
 spreadsheet = gc.open_by_url(SPREADSHEET_URL)
 sheet = spreadsheet.sheet1  # Первый лист
 
-# Храним, кто задал вопрос (формат: {ID сообщения в группе: ID гостя})
+# Храним вопросы в формате {ID сообщения в группе: ID гостя}
 pending_questions = {}
 
 # Функция загрузки FAQ из Google Sheets
@@ -86,10 +86,6 @@ def load_faq():
 # Загружаем FAQ
 FAQ = load_faq()
 
-# Проверяем, загружены ли вопросы
-if not FAQ:
-    print("⚠ Внимание: FAQ пуст! Бот может не отвечать на вопросы.")
-
 # Функция обработки вопроса через GPT
 async def process_question_with_gpt(user_text):
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -110,9 +106,7 @@ async def process_question_with_gpt(user_text):
     )
     return response.choices[0].message.content.strip().lower()
 
-# Храним вопросы в формате {ID сообщения в группе: ID гостя}
-pending_questions = {}
-
+# Обработчик текстовых сообщений от гостей
 @dp.message()
 async def handle_message(message: Message):
     user_text = message.text.strip().lower()
@@ -138,38 +132,44 @@ async def handle_message(message: Message):
 
         await message.answer("Я пока не знаю ответа на этот вопрос, но могу уточнить у хозяина.")
 
+# Обработчик ответов в группе
 @dp.message()
 async def handle_group_reply(message: Message):
     print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
-    print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id})")
-print(f"📝 Это ответ на сообщение: {message.reply_to_message}")  
-# Проверяем, видит ли бот ответ
 
-    # Проверяем, что сообщение из группы и является ответом на вопрос
-    if message.chat.id == GROUP_CHAT_ID and message.reply_to_message:
-        original_message_id = message.reply_to_message.message_id
+    # Проверяем, что сообщение пришло из группы
+    if message.chat.id == GROUP_CHAT_ID:
+        print("✅ Бот видит сообщение в группе!")
 
-        # Проверяем, есть ли ID гостя, связанный с этим вопросом
-        if original_message_id in pending_questions:
-            guest_id = pending_questions.pop(original_message_id)
-            response_text = message.text.strip()
+        # Проверяем, является ли это ответом на сообщение
+        if message.reply_to_message:
+            original_message_id = message.reply_to_message.message_id
+            print(f"📝 Это ответ на сообщение ID: {original_message_id}")
 
-            # Если сообщение пустое – ничего не отправляем
-            if not response_text:
-                print("⚠ Пустой ответ, не отправляем.")
-                await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
-                return
+            # Проверяем, есть ли сохранённый вопрос в pending_questions
+            if original_message_id in pending_questions:
+                guest_id = pending_questions.pop(original_message_id)
+                response_text = message.text.strip()
 
-            print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
+                # Если ответ пустой – не отправляем
+                if not response_text:
+                    print("⚠ Пустой ответ, не отправляем.")
+                    await message.reply("⚠ Ошибка: Пустое сообщение. Ответ не отправлен.")
+                    return
 
-            # Отправляем ответ гостю
-            await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+                print(f"✅ Отправляем ответ гостю (ID {guest_id}): '{response_text}'")
 
-            # Подтверждение в группе
-            await message.reply("✅ Ответ отправлен гостю!")
+                # Отправляем ответ гостю
+                await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{response_text}")
+
+                # Подтверждение в группе
+                await message.reply("✅ Ответ отправлен гостю!")
+            else:
+                print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
+                await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
         else:
-            print(f"❌ Ошибка: Вопрос с ID {original_message_id} не найден в pending_questions.")
-            await message.reply("⚠ Ошибка: Не могу найти гостя, которому нужно отправить ответ.")
+            print("⚠ Бот не видит, что это ответ на сообщение.")
+            await message.reply("⚠ Ошибка: Ответьте на конкретное сообщение, чтобы бот его понял.")
 
 # Запуск бота
 async def main():
