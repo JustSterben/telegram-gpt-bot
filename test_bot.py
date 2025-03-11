@@ -134,6 +134,9 @@ async def handle_message(message: Message):
 
 # Обработчик ответов в группе
 @dp.message()
+async def debug_group_messages(message: Message):
+    if message.chat.id == GROUP_CHAT_ID:
+        print(f"👀 Бот получил сообщение в группе: '{message.text}' (ID: {message.message_id})")
 async def handle_group_reply(message: Message):
     print(f"📨 Получен ответ в группе: '{message.text}' (ID: {message.message_id})")
 
