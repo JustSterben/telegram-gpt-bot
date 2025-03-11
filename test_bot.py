@@ -51,6 +51,45 @@ sheet = spreadsheet.sheet1  # Первый лист
 # Храним, кто задал вопрос (формат: {ID сообщения в группе: ID гостя})
 pending_questions = {}
 
+# Функция загрузки FAQ из Google Sheets
+def load_faq():
+    try:
+        data = sheet.get_all_records()
+        print("📥 Данные из Google Sheets загружены:", data)
+
+        if not data:
+            print("❌ Ошибка: Google Sheets пустая!")
+            return {}
+
+        headers = {key.strip().replace("\t", "").replace("\n", ""): key for key in data[0].keys()}
+        question_key = next((key for key in headers if "вопрос" in key.lower()), None)
+        answer_key = next((key for key in headers if "ответ" in key.lower()), None)
+
+        if not question_key or not answer_key:
+            print("❌ Ошибка: Нет колонок 'Основной вопрос' или 'Ответ' в таблице!")
+            return {}
+
+        faq_dict = {}
+        for row in data:
+            question = row.get(question_key, "").strip().lower()
+            answer = row.get(answer_key, "").strip()
+            if question and answer:
+                faq_dict[question] = answer
+
+        print(f"✅ Успешно загружено {len(faq_dict)} вопросов из таблицы.")
+        return faq_dict
+
+    except Exception as e:
+        print(f"❌ Ошибка при загрузке FAQ: {e}")
+        return {}
+
+# Загружаем FAQ
+FAQ = load_faq()
+
+# Проверяем, загружены ли вопросы
+if not FAQ:
+    print("⚠ Внимание: FAQ пуст! Бот может не отвечать на вопросы.")
+
 # Обработчик текстовых сообщений (если бот не знает ответа)
 @dp.message()
 async def handle_message(message: Message):
@@ -58,7 +97,7 @@ async def handle_message(message: Message):
     user_id = message.from_user.id
     print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
 
-    # GPT ищет похожий вопрос
+    # Проверяем, есть ли ответ в FAQ
     if user_text in FAQ:
         print(f"✅ Найден ответ в FAQ: '{user_text}'")
         await message.answer(FAQ[user_text])
@@ -68,7 +107,7 @@ async def handle_message(message: Message):
         # Отправляем вопрос в группу
         sent_message = await bot.send_message(
             GROUP_CHAT_ID,
-            f"📩 <b>Новый вопрос от гостя (ID {user_id}):</b>\n❓ {user_text}\n\n✍ Напишите ответ на этот вопрос, и он будет отправлен гостю автоматически.",
+            f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n👤 <b>ID гостя:</b> {user_id}\n\n✍ Напишите ответ на этот вопрос, и он будет отправлен гостю автоматически.",
             parse_mode="HTML"
         )
 
