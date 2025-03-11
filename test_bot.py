@@ -51,57 +51,6 @@ sheet = spreadsheet.sheet1  # Первый лист
 # Храним, кто задал вопрос (формат: {ID сообщения в группе: ID гостя})
 pending_questions = {}
 
-# Функция загрузки FAQ из таблицы
-def load_faq():
-    data = sheet.get_all_records()
-    print("📥 Данные из Google Sheets:", data)
-
-    if not data:
-        print("❌ Ошибка: Google Sheets пустая")
-        return {}
-
-    headers = {key.strip().replace("\t", "").replace("\n", ""): key for key in data[0].keys()}
-    print("🔍 Исправленные ключи таблицы:", headers)
-
-    question_key = next((key for key in headers if "вопрос" in key.lower()), None)
-    answer_key = next((key for key in headers if "ответ" in key.lower()), None)
-
-    if not question_key or not answer_key:
-        print("❌ Ошибка: Нет колонок 'Основной вопрос' или 'Ответ'")
-        return {}
-
-    faq_dict = {}
-    for row in data:
-        question = row.get(question_key, "").strip().lower()
-        answer = row.get(answer_key, "").strip()
-        if question and answer:
-            faq_dict[question] = answer
-
-    print("✅ Загруженные вопросы:", list(faq_dict.keys()))
-    return faq_dict
-
-FAQ = load_faq()
-
-# Функция обработки вопроса через ChatGPT
-async def process_question_with_gpt(user_text):
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    prompt = f"""
-    Ты помощник по аренде дома. Гости задают вопросы о доме, удобствах, технике.
-    Вот список вопросов, на которые у нас есть ответы:
-
-    {', '.join(FAQ.keys())}
-
-    Если вопрос похож на один из них, напиши точный вариант из списка.
-    Если вопрос непонятен – просто напиши "Неизвестный вопрос".
-
-    Вопрос гостя: {user_text}
-    """
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content.strip().lower()
-
 # Обработчик текстовых сообщений (если бот не знает ответа)
 @dp.message()
 async def handle_message(message: Message):
@@ -110,18 +59,16 @@ async def handle_message(message: Message):
     print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
 
     # GPT ищет похожий вопрос
-    matched_question = await process_question_with_gpt(user_text)
-
-    if matched_question in FAQ:
-        print(f"✅ Найден ответ: '{matched_question}'")
-        await message.answer(FAQ[matched_question])
+    if user_text in FAQ:
+        print(f"✅ Найден ответ в FAQ: '{user_text}'")
+        await message.answer(FAQ[user_text])
     else:
         print(f"❌ Неизвестный вопрос: '{user_text}', отправляем в группу")
 
         # Отправляем вопрос в группу
         sent_message = await bot.send_message(
             GROUP_CHAT_ID,
-            f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n👤 <b>ID гостя:</b> {user_id}\n\n✍ Напишите ответ на этот вопрос, и он будет отправлен гостю автоматически.",
+            f"📩 <b>Новый вопрос от гостя (ID {user_id}):</b>\n❓ {user_text}\n\n✍ Напишите ответ на этот вопрос, и он будет отправлен гостю автоматически.",
             parse_mode="HTML"
         )
 
