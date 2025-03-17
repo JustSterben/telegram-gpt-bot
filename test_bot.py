@@ -104,34 +104,37 @@ async def process_question_with_gpt(user_text):
 import requests
 import json
 
-SIPNET_LOGIN = "ТВОЙ_ЛОГИН"
-SIPNET_PASSWORD = "ТВОЙ_ПАРОЛЬ"
-SHLAGBAUM_NUMBER = "НОМЕР_ШЛАГБАУМА"
-
-# 🔹 Функция для звонка через SIPNET
 def call_gate():
-    url = "https://newapi.sipnet.ru/api.php"  # ✅ Новый URL API
-    payload = {
+    url = "https://newapi.sipnet.ru/api.php"  # Новый URL API SIPNET
+    headers = {"Content-Type": "application/json"}
+    
+    params = {
         "operation": "genCall",
         "sipuid": SIPNET_LOGIN,
         "password": SIPNET_PASSWORD,
         "DstPhone": SHLAGBAUM_NUMBER,
-        "format": "json"  # Формат ответа
+        "format": "json"
     }
-    
-    headers = {"Content-Type": "application/json"}
 
     try:
-        response = requests.post(url, data=json.dumps(payload), headers=headers)
-        data = response.json()
+        response = requests.post(url, headers=headers, json=params)
+        response_text = response.text  # Сохраняем текст ответа для логов
+        
+        print(f"🔹 Ответ SIPNET: {response_text}")  # Логируем ответ от сервера
+
+        data = response.json()  # Парсим JSON-ответ
 
         if "id" in data:
             return "✅ Звонок на шлагбаум отправлен!"
         else:
-            return f"⚠️ Ошибка SIPNET: {data.get('error', 'Неизвестная ошибка')}"
+            error_message = data.get("error", "Неизвестная ошибка")
+            return f"⚠️ Ошибка SIPNET: {error_message}"
 
-    except Exception as e:
-        return f"❌ Ошибка при выполнении запроса: {e}"
+    except json.JSONDecodeError:
+        return "❌ Ошибка: SIPNET вернул некорректный JSON-ответ."
+
+    except requests.RequestException as e:
+        return f"❌ Ошибка сети: {e}"
 
 # 🔹 Обработчик команды /open_gate
 @dp.message(Command("open_gate"))
