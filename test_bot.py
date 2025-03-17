@@ -109,7 +109,7 @@ def call_gate():
     headers = {"Content-Type": "application/json"}
     params = {
         "operation": "genCall",
-        "sipuid": SIPNET_LOGIN,
+        "login": SIPNET_LOGIN,
         "password": SIPNET_PASSWORD,
         "DstPhone": SHLAGBAUM_NUMBER,
         "format": "json"
