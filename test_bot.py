@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Переменные из Railway Variables (загружаются автоматически в Railway)
-GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # Переменные из .env
