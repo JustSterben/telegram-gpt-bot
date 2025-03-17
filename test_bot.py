@@ -105,36 +105,33 @@ import requests
 import json
 
 def call_gate():
-    url = "https://newapi.sipnet.ru/api.php"  # Новый URL API SIPNET
+    url = "https://newapi.sipnet.ru/api.php"
     headers = {"Content-Type": "application/json"}
-    
     params = {
-    "operation": "genCall",
-    "login": SIPNET_LOGIN,  # Изменил sipuid → login
-    "password": SIPNET_PASSWORD,
-    "DstPhone": SHLAGBAUM_NUMBER,
-    "format": "json"
-}
-
+        "operation": "genCall",
+        "sipuid": SIPNET_LOGIN,
+        "password": SIPNET_PASSWORD,
+        "DstPhone": SHLAGBAUM_NUMBER,
+        "format": "json"
+    }
+    
     try:
         response = requests.post(url, headers=headers, json=params)
-        response_text = response.text  # Сохраняем текст ответа для логов
-        
-        print(f"🔹 Ответ SIPNET: {response_text}")  # Логируем ответ от сервера
+        data = response.json()
+        print(f"🔹 Ответ SIPNET: {data}")  # Логируем ответ API
 
-        data = response.json()  # Парсим JSON-ответ
-
-        if "id" in data:
-            return "✅ Звонок на шлагбаум отправлен!"
+        if data.get("status") == "success":
+            call_id = data.get("id", "неизвестно")  # Получаем ID звонка, если есть
+            print(f"✅ Вызов успешно отправлен! ID звонка: {call_id}")
+            return f"✅ Звонок на шлагбаум отправлен! (ID: {call_id})"
         else:
-            error_message = data.get("error", "Неизвестная ошибка")
+            error_message = data.get("errorMessage", "Неизвестная ошибка")
+            print(f"⚠️ Ошибка SIPNET: {error_message}")
             return f"⚠️ Ошибка SIPNET: {error_message}"
-
-    except json.JSONDecodeError:
-        return "❌ Ошибка: SIPNET вернул некорректный JSON-ответ."
-
-    except requests.RequestException as e:
-        return f"❌ Ошибка сети: {e}"
+    
+    except Exception as e:
+        print(f"❌ Ошибка при выполнении запроса: {e}")
+        return f"❌ Ошибка при выполнении запроса: {e}"
 
 # 🔹 Обработчик команды /open_gate
 @dp.message(Command("open_gate"))
