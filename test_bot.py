@@ -132,6 +132,28 @@ def call_gate():
     except Exception as e:
         print(f"❌ Ошибка при выполнении запроса: {e}")
         return f"❌ Ошибка при выполнении запроса: {e}"
+        
+import requests
+
+def check_sipnet_call(call_id):
+    url = "https://newapi.sipnet.ru/api.php"  # Новый URL API SIPNET
+    headers = {"Content-Type": "application/json"}
+    params = {
+        "operation": "calls2",
+        "sipuid": SIPNET_LOGIN,   # Твой логин в SIPNET
+        "password": SIPNET_PASSWORD,  # Твой пароль в SIPNET
+        "callid": call_id,   # ID звонка, который мы хотим проверить
+        "format": "json"
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=params)
+        data = response.json()
+        print(f"📞 История звонка (ID {call_id}): {data}")
+        return data
+    except Exception as e:
+        print(f"❌ Ошибка при проверке истории звонка: {e}")
+        return None
 
 # 🔹 Обработчик команды /open_gate
 @dp.message(Command("open_gate"))
