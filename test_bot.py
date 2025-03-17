@@ -103,24 +103,34 @@ async def process_question_with_gpt(user_text):
 
 # 🔹 Функция для звонка через SIPNET
 def call_gate():
-    url = "https://www.sipnet.ru/api/call"
+    url = "https://www.sipnet.ru/api/callback.php"  # Обновленный URL
     params = {
         "operation": "genCall",
         "sipuid": SIPNET_LOGIN,
         "password": SIPNET_PASSWORD,
         "DstPhone": SHLAGBAUM_NUMBER,
-        "format": "json"
+        "format": "json",
+        "lang": "ru"
     }
 
     try:
         response = requests.get(url, params=params)
-        data = response.json()
+
+        # Проверка HTTP-кода
+        if response.status_code != 200:
+            return f"⚠️ Ошибка SIPNET: Код {response.status_code}"
+
+        # Проверка, вернул ли сервер JSON
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            return "❌ Ошибка: пустой ответ от SIPNET"
 
         if "id" in data:
             return "✅ Звонок на шлагбаум отправлен!"
         else:
             return f"⚠️ Ошибка SIPNET: {data.get('error', 'Неизвестная ошибка')}"
-    
+
     except Exception as e:
         return f"❌ Ошибка при выполнении запроса: {e}"
 
