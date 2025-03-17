@@ -5,117 +5,126 @@ import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from openai import OpenAI
 from dotenv import load_dotenv
 
-# Загружаем переменные окружения
+# 🔹 Загружаем переменные окружения
 load_dotenv()
 
-# API-ключи и данные
-SIPNET_LOGIN = os.getenv("SIPNET_LOGIN")  # Логин SIPNET
-SIPNET_PASSWORD = os.getenv("SIPNET_PASSWORD")  # Пароль SIPNET
-SHLAGBAUM_NUMBER = os.getenv("SHLAGBAUM_NUMBER")  # Номер телефона шлагбаума
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен Telegram бота
-GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")  # Данные Google
-GROUP_CHAT_ID = os.getenv("GROUP_CHAT_ID")  # ID группы для вопросов
+# 🔹 API-ключи и данные
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
-# Проверяем, что все данные загружены
-if not all([SIPNET_LOGIN, SIPNET_PASSWORD, SHLAGBAUM_NUMBER, BOT_TOKEN, GOOGLE_CREDENTIALS_JSON]):
-    print("❌ Ошибка: Не все переменные окружения заданы!")
+# 🔹 SIPNET ДАННЫЕ
+SIPNET_LOGIN = os.getenv("SIPNET_LOGIN")
+SIPNET_PASSWORD = os.getenv("SIPNET_PASSWORD")
+SHLAGBAUM_NUMBER = os.getenv("SHLAGBAUM_NUMBER")
+
+# 🔹 ID группы для неизвестных вопросов
+GROUP_CHAT_ID = -1002461315654
+
+# 🔹 Проверяем, что все переменные заданы
+if not all([OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, GOOGLE_CREDENTIALS_JSON, SIPNET_LOGIN, SIPNET_PASSWORD, SHLAGBAUM_NUMBER]):
+    print("❌ Ошибка! Не найдены все необходимые переменные окружения.")
     exit(1)
 
-# Инициализация бота
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# 🔹 Создаём бота
+bot = Bot(token=TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
-# Подключаемся к Google Sheets
-creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-gc = gspread.authorize(creds)
+# 🔹 Подключаемся к Google Sheets
+try:
+    creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
+    SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    gc = gspread.authorize(creds)
 
-# Открываем Google Таблицу
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQV7TxMDrZiZpSKWrz8IBpmo/edit?gid=0"
-spreadsheet = gc.open_by_url(SPREADSHEET_URL)
-sheet = spreadsheet.sheet1  # Первый лист
+    # 🔹 Открываем таблицу
+    SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1gVa34e1k0wpjantVq91IQV7TxMDrZiZpSKWrz8IBpmo/edit?gid=0"
+    spreadsheet = gc.open_by_url(SPREADSHEET_URL)
+    sheet = spreadsheet.sheet1  # первый лист
+    print("✅ Успешно подключились к Google Sheets!")
+except Exception as e:
+    print(f"❌ Ошибка подключения к Google Sheets: {e}")
+    exit(1)
 
-# Загружаем вопросы и ответы из таблицы
+# 🔹 Храним, кто задал вопрос (формат: {ID сообщения в группе: ID гостя})
+pending_questions = {}
+
+# 🔹 Функция загрузки вопросов из Google Sheets
 def load_faq():
     try:
         data = sheet.get_all_records()
         print("📥 Данные из Google Sheets загружены:", data)
 
         if not data:
-            print("❌ Ошибка: Таблица пустая!")
+            print("❌ Ошибка: Google Sheets пустая!")
             return {}
 
-        faq_dict = {row["Основной вопрос"].strip().lower(): row["Ответ"].strip() for row in data if row["Основной вопрос"] and row["Ответ"]}
-        
-        print(f"✅ Успешно загружено {len(faq_dict)} вопросов из таблицы.")
+        headers = {key.strip(): key for key in data[0].keys()}
+        question_key = next((key for key in headers if "вопрос" in key.lower()), None)
+        answer_key = next((key for key in headers if "ответ" in key.lower()), None)
+
+        if not question_key or not answer_key:
+            print("❌ Ошибка: В таблице нет колонок 'Основной вопрос' или 'Ответ'!")
+            return {}
+
+        faq_dict = {row.get(question_key, "").strip().lower(): row.get(answer_key, "").strip() for row in data if row.get(question_key)}
+        print(f"✅ Загружено {len(faq_dict)} вопросов из таблицы.")
         return faq_dict
     except Exception as e:
-        print(f"❌ Ошибка при загрузке FAQ: {e}")
+        print(f"❌ Ошибка загрузки FAQ: {e}")
         return {}
 
+# 🔹 Загружаем FAQ
 FAQ = load_faq()
 
-# Обработчик сообщений из Telegram
-@dp.message()
-async def handle_message(message: types.Message):
-    user_text = message.text.strip().lower() if message.text else None
+# 🔹 Функция обработки вопроса через GPT
+async def process_question_with_gpt(user_text):
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    prompt = f"""
+    Ты помощник по аренде дома. Гости задают вопросы о доме, удобствах, технике.
+    Вот список вопросов, на которые у нас есть ответы:
+    {', '.join(FAQ.keys())}
+    Если вопрос похож на один из них, напиши точный вариант из списка.
+    Если вопрос непонятен – просто напиши "Неизвестный вопрос".
+    Вопрос гостя: {user_text}
+    """
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content.strip().lower()
 
-    if not user_text:
-        return
-
-    user_id = message.from_user.id
-    print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
-
-    if user_text in FAQ:
-        print(f"✅ Найден ответ: {FAQ[user_text]}")
-        await message.answer(FAQ[user_text])
-    else:
-        print(f"❌ Неизвестный вопрос: '{user_text}', отправляем в группу")
-        sent_message = await bot.send_message(
-            GROUP_CHAT_ID,
-            f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n👤 <b>ID гостя:</b> {user_id}",
-            parse_mode="HTML"
-        )
-        await message.answer("Я пока не знаю ответа на этот вопрос, но уточню и сообщу тебе!")
-
-# Функция для звонка через SIPNET
+# 🔹 Функция для звонка через SIPNET
 def call_gate():
-    url = "https://www.sipnet.ru/api/callback.php"  # Проверь правильность URL
+    url = "https://www.sipnet.ru/api/call"
     params = {
         "operation": "genCall",
         "sipuid": SIPNET_LOGIN,
         "password": SIPNET_PASSWORD,
         "DstPhone": SHLAGBAUM_NUMBER,
-        "format": "json",
-        "lang": "ru"
+        "format": "json"
     }
 
     try:
         response = requests.get(url, params=params)
-
-        if response.status_code != 200:
-            return f"⚠️ Ошибка SIPNET: Код {response.status_code}"
-
-        try:
-            data = response.json()
-        except json.JSONDecodeError:
-            return "❌ Ошибка: пустой ответ от SIPNET"
+        data = response.json()
 
         if "id" in data:
             return "✅ Звонок на шлагбаум отправлен!"
         else:
             return f"⚠️ Ошибка SIPNET: {data.get('error', 'Неизвестная ошибка')}"
-
+    
     except Exception as e:
         return f"❌ Ошибка при выполнении запроса: {e}"
 
-# Команда для открытия шлагбаума
+# 🔹 Обработчик команды /open_gate
 @dp.message(Command("open_gate"))
 async def open_gate_command(message: types.Message):
     user_id = message.from_user.id
@@ -124,7 +133,50 @@ async def open_gate_command(message: types.Message):
     response = call_gate()
     await message.answer(response)
 
-# Запуск бота
+# 🔹 Обработчик сообщений гостей
+@dp.message()
+async def handle_message(message: Message):
+    user_text = message.text.strip().lower() if message.text else None
+
+    # 🔹 Если сообщение из группы
+    if message.chat.id == GROUP_CHAT_ID:
+        if message.reply_to_message:
+            await handle_group_reply(message)
+        return
+
+    # 🔹 Обработка сообщений от гостей
+    if not user_text:
+        return
+
+    user_id = message.from_user.id
+    print(f"📩 Вопрос от пользователя (ID {user_id}): {user_text}")
+
+    matched_question = await process_question_with_gpt(user_text)
+
+    if matched_question in FAQ:
+        await message.answer(FAQ[matched_question])
+    else:
+        sent_message = await bot.send_message(
+            GROUP_CHAT_ID,
+            f"📩 <b>Новый вопрос от гостя:</b>\n❓ {user_text}\n👤 <b>ID гостя:</b> {user_id}\n\n✍ Напишите ответ на этот вопрос, и он будет отправлен гостю автоматически.",
+            parse_mode="HTML"
+        )
+
+        pending_questions[sent_message.message_id] = user_id
+        await message.answer("Я пока не знаю ответа, но уточню у хозяина.")
+
+# 🔹 Обработчик ответов в группе
+async def handle_group_reply(message: Message):
+    if message.chat.id != GROUP_CHAT_ID or not message.reply_to_message:
+        return
+
+    original_message_id = message.reply_to_message.message_id
+    if original_message_id in pending_questions:
+        guest_id = pending_questions.pop(original_message_id)
+        await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{message.text.strip()}")
+        await message.reply("✅ Ответ отправлен гостю!")
+
+# 🔹 Запуск бота
 async def main():
     print("🚀 Бот запущен!")
     await bot.delete_webhook(drop_pending_updates=True)
