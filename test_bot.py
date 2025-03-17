@@ -108,45 +108,15 @@ SIPNET_LOGIN = "ТВОЙ_ЛОГИН"
 SIPNET_PASSWORD = "ТВОЙ_ПАРОЛЬ"
 SHLAGBAUM_NUMBER = "НОМЕР_ШЛАГБАУМА"
 
-# 🔹 Функция для регистрации телефона в SIPNET (получаем ID)
-def register_phone():
-    url = "https://newapi.sipnet.ru/api.php"  # 🔥 Новый URL API
-    payload = {
-        "operation": "registerphone1",
-        "format": "json",
-        "login": SIPNET_LOGIN,
-        "password": SIPNET_PASSWORD,
-        "Phone": SHLAGBAUM_NUMBER
-    }
-    
-    headers = {"Content-Type": "application/json"}
-
-    try:
-        response = requests.post(url, data=json.dumps(payload), headers=headers)
-        data = response.json()
-
-        if "id" in data:
-            print(f"✅ Успешно зарегистрирован номер, ID: {data['id']}")
-            return data["id"]
-        else:
-            print(f"⚠️ Ошибка регистрации номера SIPNET: {data.get('error', 'Неизвестная ошибка')}")
-            return None
-    except Exception as e:
-        print(f"❌ Ошибка при регистрации номера: {e}")
-        return None
-
-# 🔹 Функция для звонка через SIPNET (используем ID из регистрации)
+# 🔹 Функция для звонка через SIPNET
 def call_gate():
-    phone_id = register_phone()
-    if not phone_id:
-        return "❌ Ошибка регистрации номера в SIPNET."
-
-    url = "https://newapi.sipnet.ru/api.php"  # 🔥 Новый URL API
+    url = "https://newapi.sipnet.ru/api.php"  # ✅ Новый URL API
     payload = {
         "operation": "genCall",
-        "format": "json",
-        "id": phone_id,  # Используем ID из registerphone1
-        "DstPhone": SHLAGBAUM_NUMBER
+        "sipuid": SIPNET_LOGIN,
+        "password": SIPNET_PASSWORD,
+        "DstPhone": SHLAGBAUM_NUMBER,
+        "format": "json"  # Формат ответа
     }
     
     headers = {"Content-Type": "application/json"}
