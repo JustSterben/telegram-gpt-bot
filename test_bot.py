@@ -41,6 +41,7 @@ dp = Dispatcher()
 
 # Подключаемся к Google Таблице
 creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
+print(f"GOOGLE_CREDENTIALS_JSON: {GOOGLE_CREDENTIALS_JSON}")
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
