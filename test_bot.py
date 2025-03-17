@@ -117,6 +117,7 @@ def call_gate():
         data = response.json()
 
         if "id" in data:
+            print(f"🔍 Ответ от SIPNET: {response.text}")
             return "✅ Звонок на шлагбаум отправлен!"
         else:
             return f"⚠️ Ошибка SIPNET: {data.get('error', 'Неизвестная ошибка')}"
