@@ -106,31 +106,64 @@ async def process_question_with_gpt(user_text):
 import requests
 import json
 
-def call_gate():
+# 🔹 Функция регистрации номера в SIPNET (Шаг 1)
+def register_phone():
+    """Регистрирует номер телефона и получает ID для дальнейшего вызова."""
+    url = "https://newapi.sipnet.ru/api.php"
+    headers = {"Content-Type": "application/json"}
+    params = {
+        "operation": "registerphone1",
+        "sipuid": SIPNET_LOGIN,   # Логин в SIPNET
+        "password": SIPNET_PASSWORD,  # Пароль в SIPNET
+        "Phone": SHLAGBAUM_NUMBER,   # Номер телефона для регистрации
+        "format": "json"
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=params)
+        data = response.json()
+        print(f"🔹 Ответ SIPNET (регистрация телефона): {data}")
+
+        if "id" in data:
+            call_id = data["id"]
+            print(f"✅ Телефон зарегистрирован! ID: {call_id}")
+            return call_id
+        else:
+            error_message = data.get("errorMessage", "Неизвестная ошибка")
+            print(f"⚠️ Ошибка SIPNET (регистрация телефона): {error_message}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Ошибка при регистрации телефона: {e}")
+        return None
+
+
+# 🔹 Функция вызова шлагбаума (Шаг 2)
+def call_gate(call_id):
+    """Вызывает звонок на шлагбаум, используя полученный ID."""
     url = "https://newapi.sipnet.ru/api.php"
     headers = {"Content-Type": "application/json"}
     params = {
         "operation": "genCall",
-        "login": SIPNET_LOGIN,
-        "password": SIPNET_PASSWORD,
-        "DstPhone": SHLAGBAUM_NUMBER,
+        "id": call_id,  # Используем ID, полученный ранее
+        "DstPhone": SHLAGBAUM_NUMBER,  # Номер шлагбаума
         "format": "json"
     }
-    
+
     try:
         response = requests.post(url, headers=headers, json=params)
         data = response.json()
-        print(f"🔹 Ответ SIPNET: {data}")  # Логируем ответ API
+        print(f"🔹 Ответ SIPNET (звонок на шлагбаум): {data}")
 
-        if data.get("status") == "success":
-            call_id = data.get("id", "неизвестно")  # Получаем ID звонка, если есть
+        if "id" in data:
+            call_id = data["id"]
             print(f"✅ Вызов успешно отправлен! ID звонка: {call_id}")
             return f"✅ Звонок на шлагбаум отправлен! (ID: {call_id})"
         else:
             error_message = data.get("errorMessage", "Неизвестная ошибка")
-            print(f"⚠️ Ошибка SIPNET: {error_message}")
+            print(f"⚠️ Ошибка SIPNET (звонок): {error_message}")
             return f"⚠️ Ошибка SIPNET: {error_message}"
-    
+
     except Exception as e:
         print(f"❌ Ошибка при выполнении запроса: {e}")
         return f"❌ Ошибка при выполнении запроса: {e}"
