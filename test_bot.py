@@ -242,7 +242,11 @@ async def check_call_command(message: types.Message):
 
     call_id = args[1]
     response = check_sipnet_call(call_id)
-    await message.answer(response)
+
+    if response:
+        await message.answer(f"📞 История звонка: {json.dumps(response, indent=2, ensure_ascii=False)}")
+    else:
+        await message.answer("⚠️ Ошибка: не удалось получить информацию о звонке.")
 
 # 🔹 Запуск бота
 async def main():
