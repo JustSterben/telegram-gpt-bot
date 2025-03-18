@@ -155,6 +155,31 @@ def check_sipnet_call(call_id):
         print(f"❌ Ошибка при проверке истории звонка: {e}")
         return None
 
+# 🔹 Функция проверки статуса звонка в SIPNET
+def check_sipnet_call(call_id):
+    url = "https://newapi.sipnet.ru/api.php"
+    headers = {"Content-Type": "application/json"}
+    params = {
+        "operation": "calls2",
+        "sipuid": SIPNET_LOGIN,
+        "password": SIPNET_PASSWORD,
+        "id": call_id,
+        "format": "json"
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=params)
+        data = response.json()
+        print(f"🔹 Ответ SIPNET (история вызовов): {data}")
+
+        if "calls" in data and data["calls"]:
+            return f"✅ Звонок найден! Данные: {data['calls']}"
+        else:
+            return f"⚠️ Ошибка SIPNET: {data.get('errorMessage', 'Звонок не найден')}"
+
+    except Exception as e:
+        return f"❌ Ошибка при выполнении запроса: {e}"
+
 # 🔹 Обработчик команды /open_gate
 @dp.message(Command("open_gate"))
 async def open_gate_command(message: types.Message):
@@ -206,6 +231,18 @@ async def handle_group_reply(message: Message):
         guest_id = pending_questions.pop(original_message_id)
         await bot.send_message(guest_id, f"💬 Ответ на ваш вопрос:\n{message.text.strip()}")
         await message.reply("✅ Ответ отправлен гостю!")
+
+# 🔹 Обработчик команды /check_call
+@dp.message(Command("check_call"))
+async def check_call_command(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Используй команду так: /check_call <ID звонка>")
+        return
+
+    call_id = args[1]
+    response = check_sipnet_call(call_id)
+    await message.answer(response)
 
 # 🔹 Запуск бота
 async def main():
