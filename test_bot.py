@@ -28,7 +28,7 @@ SHLAGBAUM_NUMBER = os.getenv("SHLAGBAUM_NUMBER")
 # 🔹 ID группы для неизвестных вопросов
 GROUP_CHAT_ID = -1002461315654
 
-# 🔹 Проверяем, что все переменные заданы
+# 🔹 Проверяем переменные окружения
 if not all([OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, GOOGLE_CREDENTIALS_JSON, SIPNET_LOGIN, SIPNET_PASSWORD, SHLAGBAUM_NUMBER]):
     print("❌ Ошибка! Не найдены все необходимые переменные окружения.")
     exit(1)
@@ -53,12 +53,12 @@ except Exception as e:
     print(f"❌ Ошибка подключения к Google Sheets: {e}")
     exit(1)
 
-# 🔹 Храним, кто задал вопрос (формат: {ID сообщения в группе: ID гостя})
-pending_questions = {}
+# 🔹 Храним ID звонка для SIPNET
+REGISTERED_PHONE_ID = None
 
 # 🔹 Функция регистрации номера в SIPNET
 def register_phone():
-    """Регистрирует номер телефона и получает ID для дальнейшего вызова."""
+    global REGISTERED_PHONE_ID
     url = "https://newapi.sipnet.ru/api.php"
     headers = {"Content-Type": "application/json"}
     params = {
@@ -75,26 +75,30 @@ def register_phone():
         print(f"🔹 Ответ SIPNET (регистрация телефона): {data}")
 
         if "id" in data:
-            call_id = data["id"]
-            print(f"✅ Телефон зарегистрирован! ID: {call_id}")
-            return call_id
+            REGISTERED_PHONE_ID = data["id"]
+            print(f"✅ Телефон зарегистрирован! ID: {REGISTERED_PHONE_ID}")
+            return REGISTERED_PHONE_ID
         else:
             error_message = data.get("errorMessage", "Неизвестная ошибка")
             print(f"⚠️ Ошибка SIPNET (регистрация телефона): {error_message}")
             return None
-
     except Exception as e:
         print(f"❌ Ошибка при регистрации телефона: {e}")
         return None
 
 # 🔹 Функция вызова шлагбаума
-def call_gate(call_id):
-    """Вызывает звонок на шлагбаум, используя полученный ID."""
+def call_gate():
+    global REGISTERED_PHONE_ID
+    if not REGISTERED_PHONE_ID:
+        REGISTERED_PHONE_ID = register_phone()
+        if not REGISTERED_PHONE_ID:
+            return "❌ Ошибка регистрации телефона в SIPNET."
+
     url = "https://newapi.sipnet.ru/api.php"
     headers = {"Content-Type": "application/json"}
     params = {
         "operation": "genCall",
-        "id": call_id,
+        "id": REGISTERED_PHONE_ID,
         "DstPhone": SHLAGBAUM_NUMBER,
         "format": "json"
     }
@@ -102,17 +106,16 @@ def call_gate(call_id):
     try:
         response = requests.post(url, headers=headers, json=params)
         data = response.json()
-        print(f"🔹 Ответ SIPNET (звонок на шлагбаум): {data}")
+        print(f"🔹 Ответ SIPNET (вызов шлагбаума): {data}")
 
-        if "id" in data:
-            call_id = data["id"]
+        if data.get("status") == "success":
+            call_id = data.get("id", "неизвестно")
             print(f"✅ Вызов успешно отправлен! ID звонка: {call_id}")
             return f"✅ Звонок на шлагбаум отправлен! (ID: {call_id})"
         else:
             error_message = data.get("errorMessage", "Неизвестная ошибка")
-            print(f"⚠️ Ошибка SIPNET (звонок): {error_message}")
+            print(f"⚠️ Ошибка SIPNET: {error_message}")
             return f"⚠️ Ошибка SIPNET: {error_message}"
-
     except Exception as e:
         print(f"❌ Ошибка при выполнении запроса: {e}")
         return f"❌ Ошибка при выполнении запроса: {e}"
@@ -123,18 +126,18 @@ async def open_gate_command(message: types.Message):
     user_id = message.from_user.id
     print(f"📞 Пользователь {user_id} запросил открытие шлагбаума")
 
-    # 1️⃣ Регистрируем телефон (получаем ID)
-    call_id = register_phone()
-    if not call_id:
-        await message.answer("❌ Ошибка регистрации номера в SIPNET.")
-        return
-
-    # 2️⃣ Вызываем шлагбаум
-    response = call_gate(call_id)
+    response = call_gate()
     await message.answer(response)
 
-# 🔹 Функция проверки статуса звонка
-def check_sipnet_call(call_id):
+# 🔹 Обработчик команды /check_call
+@dp.message(Command("check_call"))
+async def check_call_command(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Используй команду так: /check_call <ID звонка>")
+        return
+
+    call_id = args[1]
     url = "https://newapi.sipnet.ru/api.php"
     headers = {"Content-Type": "application/json"}
     params = {
@@ -148,27 +151,14 @@ def check_sipnet_call(call_id):
     try:
         response = requests.post(url, headers=headers, json=params)
         data = response.json()
-        print(f"🔹 Ответ SIPNET (история вызовов): {data}")
+        print(f"🔹 История звонка (ID {call_id}): {data}")
 
         if "calls" in data and data["calls"]:
-            return f"✅ Звонок найден! Данные: {json.dumps(data['calls'], indent=2, ensure_ascii=False)}"
+            await message.answer(f"✅ Звонок найден! Данные: {json.dumps(data['calls'], indent=2, ensure_ascii=False)}")
         else:
-            return f"⚠️ Ошибка SIPNET: {data.get('errorMessage', 'Звонок не найден')}"
-
+            await message.answer(f"⚠️ Ошибка SIPNET: {data.get('errorMessage', 'Звонок не найден')}")
     except Exception as e:
-        return f"❌ Ошибка при выполнении запроса: {e}"
-
-# 🔹 Обработчик команды /check_call
-@dp.message(Command("check_call"))
-async def check_call_command(message: types.Message):
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer("❌ Используй команду так: /check_call <ID звонка>")
-        return
-
-    call_id = args[1]
-    response = check_sipnet_call(call_id)
-    await message.answer(response)
+        await message.answer(f"❌ Ошибка при выполнении запроса: {e}")
 
 # 🔹 Запуск бота
 async def main():
