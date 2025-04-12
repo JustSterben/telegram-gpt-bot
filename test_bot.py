@@ -141,20 +141,18 @@ def register_phone_sipnet():
 
 # 🔹 Функция вызова шлагбаума (Шаг 2)
 def call_gate_with_id():
-    global REGISTERED_PHONE_ID
-    if not REGISTERED_PHONE_ID:
-        REGISTERED_PHONE_ID = register_phone_sipnet()
-        if not REGISTERED_PHONE_ID:
-            return "❌ Ошибка регистрации телефона в SIPNET."
+    try:
+        r = requests.post("http://89.169.164.96:8080/open-gate", json={
+            "token": os.getenv("ACCESS_TOKEN")
+        })
+        res = r.json()
+        if res.get("status") == "success":
+            return f"✅ Звонок отправлен! (ID: {res.get('call_id')})"
+        else:
+            return f"❌ Ошибка: {res.get('message', 'неизвестная')}"
+    except Exception as e:
+        return f"❌ Ошибка подключения к прокси: {e}"
 
-    url = "https://newapi.sipnet.ru/api.php"
-    headers = {"Content-Type": "application/json"}
-    params = {
-        "operation": "genCall",
-        "id": REGISTERED_PHONE_ID,  # Используем ID, а не login/password
-        "DstPhone": SHLAGBAUM_NUMBER,
-        "format": "json"
-    }
 
     try:
         response = requests.post(url, headers=headers, json=params)
